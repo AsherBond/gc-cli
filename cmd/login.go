@@ -160,6 +160,11 @@ func fetchApiKey(tenantUUID string) (*auth.ApiKey, error) {
 }
 
 func selectBackendName(tenantUUID string, deployFlow bool) (string, bool, error) {
+	if flagValue := viper.GetString(BACKEND_NAME_FLAG); flagValue != "" {
+		// non-incloud architecture is deprecated, so explicitly provided backends are always incloud
+		return flagValue, true, nil
+	}
+
 	var err error
 	var auth0Token *auth.Auth0Token
 	if auth0Token, err = auth.LoadAuth0Token(); err != nil {
@@ -187,14 +192,17 @@ func selectBackendName(tenantUUID string, deployFlow bool) (string, bool, error)
 		return "", false, nil
 	}
 
-	backendId := ""
-	switch len(backendsList) {
-	case 0:
+	if len(backendsList) == 0 {
 		return "", false, ErrNoActiveBackends
-	case 1:
-		backendId = backendsList[0].Name
-	default:
-		backendId = ui.GlobalWriter.SelectPrompt("Select backend:", maps.Keys(backendNames))
+	}
+
+	if len(backendsList) == 1 {
+		return backendsList[0].Name, backendNames[backendsList[0].Name], nil
+	}
+
+	backendId := ui.GlobalWriter.SelectPrompt("Select backend:", maps.Keys(backendNames))
+	if backendId == "" {
+		return "", false, ErrExecutionAborted
 	}
 
 	return backendId, backendNames[backendId], nil
